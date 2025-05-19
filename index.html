@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Life Calendar</title>
+<style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(20, 20px); grid-gap: 2px; margin-top: 20px; }
+    .cell { width: 20px; height: 20px; border: 1px solid #ccc; }
+    .past { background: #000; }
+    .future { background: #fff; }
+</style>
+</head>
+<body>
+<h1>Life Calendar</h1>
+<p>Enter your birth date and expected lifespan in years to visualize your life.</p>
+<form onsubmit="update(); return false;">
+    <label>Date of Birth: <input type="date" id="dob" required></label>
+    <label>Expected Lifespan: <input type="number" id="expect" value="80" min="1" required></label>
+    <button type="submit">Update</button>
+</form>
+<p id="output"></p>
+<div class="grid" id="grid"></div>
+
+<script>
+function update() {
+    const dobInput = document.getElementById('dob').value;
+    const expectancy = parseInt(document.getElementById('expect').value, 10);
+    if (!dobInput || isNaN(expectancy)) return;
+    const dob = new Date(dobInput);
+    const today = new Date();
+    const ageYears = (today - dob) / (1000 * 60 * 60 * 24 * 365.25);
+    const age = Math.floor(ageYears);
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    const columns = 20;
+    grid.style.gridTemplateColumns = `repeat(${columns}, 20px)`;
+    for (let i = 0; i < expectancy; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell ' + (i < age ? 'past' : 'future');
+        grid.appendChild(cell);
+    }
+    const daysLeft = Math.max(0, Math.round((expectancy - ageYears) * 365.25));
+    document.getElementById('output').textContent = `Approximately ${daysLeft} days left.`;
+}
+</script>
+</body>
+</html>
