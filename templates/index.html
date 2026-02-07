@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FPI Company Checker - Eternal (Zomato)</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f0f2f5;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 16px rgba(0,0,0,0.1);
+            padding: 40px;
+            max-width: 700px;
+            width: 100%;
+        }
+        h1 {
+            font-size: 22px;
+            color: #1a1a2e;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+        .company-tag {
+            display: inline-block;
+            background: #e8f4fd;
+            color: #0066cc;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 13px;
+            margin-right: 6px;
+        }
+        .check-btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            background: #e23744;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background 0.2s;
+        }
+        .check-btn:hover { background: #c62828; }
+        .check-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .results { margin-top: 24px; }
+        .result-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        .result-card h3 {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .result-card .date-info {
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 8px;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .status.found {
+            background: #fff3e0;
+            color: #e65100;
+        }
+        .status.not-found {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        .status.error {
+            background: #fce4ec;
+            color: #c62828;
+        }
+        .detail-text {
+            margin-top: 8px;
+            font-size: 13px;
+            color: #555;
+            line-height: 1.5;
+        }
+        .match-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px;
+            font-size: 13px;
+        }
+        .match-table th, .match-table td {
+            text-align: left;
+            padding: 6px 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .match-table th {
+            background: #f5f5f5;
+            font-weight: 600;
+            color: #333;
+        }
+        .links {
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid #eee;
+            font-size: 12px;
+            color: #999;
+        }
+        .links a {
+            color: #0066cc;
+            text-decoration: none;
+        }
+        .links a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>FPI Company Checker</h1>
+        <p class="subtitle">
+            Check if
+            <span class="company-tag">Eternal</span>
+            <span class="company-tag">Zomato</span>
+            appears on NSDL FPI monitoring lists
+        </p>
+
+        <button class="check-btn" id="checkBtn" onclick="runCheck()">
+            Check Now
+        </button>
+
+        <div class="results" id="results"></div>
+
+        <div class="links">
+            <strong>Data Sources:</strong><br>
+            1. <a href="https://www.fpi.nsdl.co.in/web/Reports/Utilization_Breach_Limit_Report.aspx" target="_blank">
+                Utilization of 3% Breach Limit Report
+            </a><br>
+            2. <a href="https://www.fpi.nsdl.co.in/web/StaticReports/Monitoring_of_Utilization/Apex%20Parent%20Company%20Information.htm" target="_blank">
+                Apex Parent Company Information
+            </a>
+        </div>
+    </div>
+
+    <script>
+        async function runCheck() {
+            const btn = document.getElementById("checkBtn");
+            const resultsDiv = document.getElementById("results");
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Checking...';
+            resultsDiv.innerHTML = "";
+
+            try {
+                const resp = await fetch("/check", { method: "POST" });
+                const data = await resp.json();
+                resultsDiv.innerHTML = renderResults(data);
+            } catch (err) {
+                resultsDiv.innerHTML = `
+                    <div class="result-card">
+                        <span class="status error">Error</span>
+                        <p class="detail-text">${err.message}</p>
+                    </div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Check Again";
+            }
+        }
+
+        function renderResults(data) {
+            let html = "";
+
+            // Breach Report
+            const br = data.breach_report;
+            html += `<div class="result-card">
+                <h3>List 1: Utilization of 3% Breach Limit Report</h3>
+                <div class="date-info">Date: ${br.date || "N/A"}</div>`;
+
+            if (br.error) {
+                html += `<span class="status error">Error</span>`;
+            } else if (br.found) {
+                html += `<span class="status found">FOUND on List</span>`;
+            } else {
+                html += `<span class="status not-found">NOT on List</span>`;
+            }
+
+            html += `<p class="detail-text">${br.details}</p>`;
+
+            if (br.table_rows && br.table_rows.length > 0) {
+                html += `<table class="match-table"><tr>`;
+                br.table_rows[0].forEach((_, i) => {
+                    html += `<th>Column ${i + 1}</th>`;
+                });
+                html += `</tr>`;
+                br.table_rows.forEach(row => {
+                    html += `<tr>`;
+                    row.forEach(cell => { html += `<td>${cell}</td>`; });
+                    html += `</tr>`;
+                });
+                html += `</table>`;
+            }
+            html += `</div>`;
+
+            // Apex Parent Company
+            const ap = data.apex_parent;
+            html += `<div class="result-card">
+                <h3>List 2: Apex Parent Company Information</h3>`;
+
+            if (ap.error) {
+                html += `<span class="status error">Error</span>`;
+            } else if (ap.found) {
+                html += `<span class="status found">FOUND on List</span>`;
+            } else {
+                html += `<span class="status not-found">NOT on List</span>`;
+            }
+
+            html += `<p class="detail-text">${ap.details}</p>`;
+
+            if (ap.matches && ap.matches.length > 0) {
+                html += `<table class="match-table">
+                    <tr><th>Ownership Group</th><th>Apex Company</th><th>ISIN</th></tr>`;
+                ap.matches.forEach(m => {
+                    html += `<tr>
+                        <td>${m.ownership_group}</td>
+                        <td>${m.apex_company}</td>
+                        <td>${m.isin}</td>
+                    </tr>`;
+                });
+                html += `</table>`;
+            }
+            html += `</div>`;
+
+            return html;
+        }
+    </script>
+</body>
+</html>
