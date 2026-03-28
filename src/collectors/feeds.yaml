@@ -18,87 +18,77 @@ feeds:
     language: en
     regions: ["US", "Global"]
 
-  - url: "https://feeds.reuters.com/reuters/businessNews"
-    name: "Reuters Business"
+  - url: "https://news.google.com/rss/search?q=site:reuters.com+world&hl=en-US&gl=US&ceid=US:en"
+    name: "Reuters World (via Google News)"
     language: en
     regions: ["US", "Global"]
-
-  - url: "https://feeds.reuters.com/Reuters/worldNews"
-    name: "Reuters World"
-    language: en
-    regions: ["Global"]
 
   - url: "https://www.federalreserve.gov/feeds/press_all.xml"
     name: "Federal Reserve Press"
     language: en
     regions: ["US"]
 
+  - url: "https://news.google.com/rss/search?q=%22Federal+Reserve%22+OR+%22US+economy%22+OR+%22Treasury%22&hl=en-US&gl=US&ceid=US:en"
+    name: "US Macro (via Google News)"
+    language: en
+    regions: ["US"]
+
   # ── China ──
-  - url: "https://www.caixinglobal.com/rss/"
-    name: "Caixin Global"
+  - url: "https://news.google.com/rss/search?q=China+economy+OR+PBOC+OR+%22trade+war%22+OR+tariff+OR+%22US-China%22&hl=en-US&gl=US&ceid=US:en"
+    name: "China Macro (via Google News)"
     language: en
     regions: ["CN"]
 
-  - url: "https://www.scmp.com/rss/91/feed"
-    name: "SCMP Business"
-    language: en
-    regions: ["CN"]
-
-  - url: "http://www.news.cn/english/rss/newsEN.xml"
-    name: "Xinhua English"
-    language: en
-    regions: ["CN"]
-
-  - url: "https://finance.sina.com.cn/roll/index.d.html?cid=56588&page=1"
-    name: "Sina Finance"
-    language: zh
-    regions: ["CN"]
-
-  - url: "https://rsshub.app/cls/telegraph"
-    name: "财联社电报"
+  - url: "https://news.google.com/rss/search?q=%E4%B8%AD%E5%9B%BD+%E7%BB%8F%E6%B5%8E+OR+%E5%A4%AE%E8%A1%8C+OR+%E8%B4%B8%E6%98%93+OR+%E5%85%B3%E7%A8%8E+OR+A%E8%82%A1&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    name: "中国宏观 (via Google News)"
     language: zh
     regions: ["CN"]
 
   # ── Japan / Korea / Taiwan ──
-  - url: "https://asia.nikkei.com/rss"
+  - url: "https://asia.nikkei.com/rss/feed/nar"
     name: "Nikkei Asia"
     language: en
     regions: ["JP"]
 
-  - url: "http://www.koreaherald.com/rss/020100000000.xml"
+  - url: "https://www.koreaherald.com/rss/kh_Business"
     name: "Korea Herald Business"
     language: en
     regions: ["KR"]
 
-  - url: "https://focustaiwan.tw/rss"
-    name: "Focus Taiwan"
+  - url: "https://news.google.com/rss/search?q=Taiwan+economy+OR+TSMC+OR+%22Bank+of+Japan%22+OR+BOJ+OR+yen&hl=en-US&gl=US&ceid=US:en"
+    name: "Japan/Taiwan Macro (via Google News)"
     language: en
-    regions: ["TW"]
+    regions: ["JP", "TW"]
 
   # ── India / Southeast Asia ──
-  - url: "https://economictimes.indiatimes.com/rssfeedstopstories.cms"
-    name: "Economic Times India"
-    language: en
-    regions: ["IN"]
-
   - url: "https://www.straitstimes.com/news/business/rss.xml"
     name: "Straits Times Business"
     language: en
     regions: ["SEA"]
 
+  - url: "https://news.google.com/rss/search?q=India+economy+OR+RBI+OR+rupee+OR+sensex+OR+%22Southeast+Asia%22+OR+ASEAN&hl=en-US&gl=US&ceid=US:en"
+    name: "India/SEA Macro (via Google News)"
+    language: en
+    regions: ["IN", "SEA"]
+
   # ── Latin America ──
-  - url: "https://www.reuters.com/arc/outboundfeeds/v3/all/rss/?outputType=xml&_website=latam"
-    name: "Reuters LatAm"
+  - url: "https://en.mercopress.com/rss"
+    name: "MercoPress LatAm"
+    language: en
+    regions: ["LATAM"]
+
+  - url: "https://news.google.com/rss/search?q=%22Latin+America%22+OR+Brazil+economy+OR+Mexico+economy+OR+Argentina&hl=en-US&gl=US&ceid=US:en"
+    name: "LatAm Macro (via Google News)"
     language: en
     regions: ["LATAM"]
 
   # ── Commodities / FX ──
-  - url: "https://www.fxstreet.com/rss"
-    name: "FXStreet"
+  - url: "https://oilprice.com/rss/main"
+    name: "OilPrice"
     language: en
     regions: ["Global"]
 
-  - url: "https://oilprice.com/rss/main"
-    name: "OilPrice"
+  - url: "https://news.google.com/rss/search?q=%22crude+oil%22+OR+%22gold+price%22+OR+%22dollar+index%22+OR+commodity+OR+%22interest+rate%22&hl=en-US&gl=US&ceid=US:en"
+    name: "Commodities/FX (via Google News)"
     language: en
     regions: ["Global"]
