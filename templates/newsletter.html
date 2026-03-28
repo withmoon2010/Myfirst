@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daily Macro Brief - {{ newsletter.date.strftime('%Y-%m-%d') }}</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f4f5f7; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;">
+<tr><td align="center" style="padding:20px 10px;">
+<table role="presentation" width="680" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:8px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+
+<!-- ── Header ── -->
+<tr>
+<td style="background-color:#1a2332; padding:28px 32px; text-align:center;">
+  <h1 style="margin:0; color:#ffffff; font-size:22px; font-weight:700; letter-spacing:0.5px;">DAILY MACRO BRIEF</h1>
+  <p style="margin:6px 0 0; color:#8899aa; font-size:14px;">{{ newsletter.date.strftime('%A, %B %d, %Y') }}</p>
+</td>
+</tr>
+
+<!-- ── Key Takeaways ── -->
+{% if newsletter.key_takeaways %}
+<tr>
+<td style="padding:24px 32px 8px;">
+  <h2 style="margin:0 0 16px; font-size:16px; color:#1a2332; text-transform:uppercase; letter-spacing:1px; border-bottom:2px solid #2563eb; padding-bottom:8px;">Key Takeaways</h2>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  {% for takeaway in newsletter.key_takeaways %}
+  <tr>
+    <td style="padding:6px 0 6px 0; vertical-align:top; width:20px; color:#2563eb; font-size:14px; font-weight:700;">{{ loop.index }}.</td>
+    <td style="padding:6px 0 6px 8px; font-size:14px; line-height:1.6; color:#334155;">{{ takeaway }}</td>
+  </tr>
+  {% endfor %}
+  </table>
+</td>
+</tr>
+{% endif %}
+
+<!-- ── Risk Alerts ── -->
+{% if newsletter.risk_alerts %}
+<tr>
+<td style="padding:20px 32px 8px;">
+  <h2 style="margin:0 0 16px; font-size:16px; color:#dc2626; text-transform:uppercase; letter-spacing:1px; border-bottom:2px solid #dc2626; padding-bottom:8px;">&#9888; Risk Alerts</h2>
+  {% for alert in newsletter.risk_alerts %}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px; border-left:4px solid #dc2626; background-color:#fef2f2; border-radius:0 6px 6px 0;">
+  <tr>
+    <td style="padding:14px 16px;">
+      <p style="margin:0 0 4px; font-size:14px; font-weight:700; color:#991b1b;">
+        {% if alert.url %}<a href="{{ alert.url }}" style="color:#991b1b; text-decoration:none;">{{ alert.title }}</a>{% else %}{{ alert.title }}{% endif %}
+      </p>
+      <p style="margin:0 0 4px; font-size:13px; color:#334155; line-height:1.5;">{{ alert.summary }}</p>
+      <p style="margin:0; font-size:12px; color:#6b7280; font-style:italic;">{{ alert.market_implication }}</p>
+    </td>
+  </tr>
+  </table>
+  {% endfor %}
+</td>
+</tr>
+{% endif %}
+
+<!-- ── Special Topics ── -->
+{% if newsletter.special_topics %}
+<tr>
+<td style="padding:20px 32px 8px;">
+  <h2 style="margin:0 0 16px; font-size:16px; color:#1e40af; text-transform:uppercase; letter-spacing:1px; border-bottom:2px solid #1e40af; padding-bottom:8px;">&#128270; Special Topics</h2>
+  {% for topic in newsletter.special_topics %}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px; border-left:4px solid #2563eb; background-color:#eff6ff; border-radius:0 6px 6px 0;">
+  <tr>
+    <td style="padding:16px 18px;">
+      <p style="margin:0 0 10px; font-size:15px; font-weight:700; color:#1e40af;">{{ topic.title }}</p>
+      <p style="margin:0 0 6px; font-size:12px; font-weight:600; color:#475569; text-transform:uppercase;">Background</p>
+      <p style="margin:0 0 12px; font-size:13px; color:#334155; line-height:1.6;">{{ topic.background }}</p>
+      <p style="margin:0 0 6px; font-size:12px; font-weight:600; color:#475569; text-transform:uppercase;">Analysis</p>
+      <p style="margin:0 0 12px; font-size:13px; color:#334155; line-height:1.6;">{{ topic.analysis }}</p>
+      <p style="margin:0 0 6px; font-size:12px; font-weight:600; color:#475569; text-transform:uppercase;">Portfolio Implications</p>
+      <p style="margin:0; font-size:13px; color:#1e40af; line-height:1.6; font-weight:500;">{{ topic.portfolio_implications }}</p>
+    </td>
+  </tr>
+  </table>
+  {% endfor %}
+</td>
+</tr>
+{% endif %}
+
+<!-- ── Regional Sections ── -->
+{% for section in newsletter.sections %}
+<tr>
+<td style="padding:20px 32px 8px;">
+  <h2 style="margin:0 0 14px; font-size:15px; color:#1a2332; border-bottom:1px solid #e2e8f0; padding-bottom:8px;">
+    {{ section.region_label }}
+  </h2>
+  {% for item in section.items %}
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:14px;">
+  <tr>
+    <td style="padding:0;">
+      <p style="margin:0 0 3px; font-size:14px; font-weight:600; color:#1a2332;">
+        {% if item.url %}<a href="{{ item.url }}" style="color:#1a2332; text-decoration:none;">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}
+        {% if item.urgency == 'high' %}<span style="display:inline-block; background:#dc2626; color:#fff; font-size:10px; padding:1px 6px; border-radius:3px; margin-left:6px; vertical-align:middle;">HIGH</span>{% endif %}
+      </p>
+      <p style="margin:0 0 3px; font-size:13px; color:#475569; line-height:1.5;">{{ item.summary }}</p>
+      <p style="margin:0; font-size:12px; color:#94a3b8; font-style:italic;">{{ item.market_implication }}</p>
+      <p style="margin:2px 0 0; font-size:11px; color:#cbd5e1;">{{ item.source }} &middot; {{ item.published_at.strftime('%H:%M UTC') if item.published_at else '' }}</p>
+    </td>
+  </tr>
+  </table>
+  {% endfor %}
+</td>
+</tr>
+{% endfor %}
+
+<!-- ── Footer ── -->
+<tr>
+<td style="padding:24px 32px; background-color:#f8fafc; border-top:1px solid #e2e8f0; text-align:center;">
+  <p style="margin:0; font-size:11px; color:#94a3b8; line-height:1.5;">
+    This newsletter is generated automatically for internal use only.<br>
+    Not investment advice. Sources include RSS feeds and NewsAPI.<br>
+    Generated on {{ newsletter.date.strftime('%Y-%m-%d') }}
+  </p>
+</td>
+</tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>
