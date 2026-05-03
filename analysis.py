@@ -4,8 +4,11 @@ Comparative DCF analysis of incremental GDP impact:
   2. Trump 2.0 on US GDP (term + persistence)
   3. US-Iran war on global GDP (shock + recovery)
 
+Base year = 2026 (year 1 cashflow = end of 2026, discounted to start of 2026).
 All numbers in real USD. Discount rates are real (ex-inflation).
-Outputs comparative_gdp_dcf.pdf in the working directory.
+Each scenario decomposes the GDP impact into:
+  - core mechanism channel (productivity, policy, conflict)
+  - oil-price channel (oil $/bbl deviation x oil-to-GDP elasticity)
 
 This is an educational order-of-magnitude exercise, not investment advice.
 Assumptions are documented in-line; ranges are reported alongside point estimates.
@@ -43,16 +46,41 @@ def terminal_value(final_cashflow: float, g: float, r: float) -> float:
     return final_cashflow * (1 + g) / (r - g)
 
 
+BASE_YEAR = 2026  # year 1 = 2026; all PVs are as-of start of 2026
+
+
 @dataclass
 class DCFResult:
     name: str
     years: np.ndarray
-    annual_delta: np.ndarray   # incremental GDP $ per year (USD trillions)
-    explicit_pv: float         # USD trillions
-    terminal_pv: float         # USD trillions (0 if not used)
-    total_pv: float            # USD trillions
+    annual_delta: np.ndarray   # total incremental GDP $/yr (USD T) = mechanism + oil
+    mechanism_delta: np.ndarray  # core channel only ($T/yr)
+    oil_delta_bbl: np.ndarray   # $/bbl deviation vs $75 baseline (per year)
+    oil_gdp_delta: np.ndarray   # GDP $/yr from oil channel ($T/yr)
+    explicit_pv: float          # USD trillions
+    terminal_pv: float          # USD trillions (0 if not used)
+    oil_pv: float               # USD trillions, oil channel PV (subset of total)
+    total_pv: float             # USD trillions
     discount_rate: float
     notes: str
+
+
+# Oil-price-to-GDP elasticity. Rule of thumb: a $10/bbl sustained price increase
+# drags global GDP by ~0.10-0.20% (IMF 2000, IEA 2004, BIS 2018). I use 0.15%
+# (mid-range) for global scenarios. For the US (now roughly oil-balanced as a
+# net producer), I use 0.05% per $10/bbl.
+OIL_ELASTICITY_GLOBAL = 0.0015   # 0.15% global GDP per $10/bbl sustained
+OIL_ELASTICITY_US = 0.0005       # 0.05% US GDP per $10/bbl sustained
+OIL_BASELINE = 75.0              # $/bbl baseline
+
+
+def oil_to_gdp(oil_delta_bbl: np.ndarray, base_gdp: float, elasticity: float) -> np.ndarray:
+    """Convert oil price deviation ($/bbl, vs baseline) to GDP impact ($T/yr).
+
+    Sign convention: oil_delta > 0 (more expensive oil) -> negative GDP impact
+    for net importers / global economy.
+    """
+    return -np.asarray(oil_delta_bbl, dtype=float) / 10.0 * elasticity * base_gdp
 
 
 # ---------------------------------------------------------------------------
@@ -74,33 +102,54 @@ def run_ai_dcf(discount_rate: float = 0.06,
                horizon: int = 30,
                peak_delta: float = 4.5,
                peak_year_offset: int = 15,
-               terminal_growth: float = 0.015) -> DCFResult:
+               terminal_growth: float = 0.015,
+               peak_oil_delta: float = 7.0) -> DCFResult:
+    """AI: global incremental GDP, base year 2026, with oil channel.
+
+    Oil channel: AI datacenter electricity demand is ~1500 TWh by 2030 (IEA),
+    rising to ~3000 TWh by 2035. Indirect oil/gas pressure pushes WTI ~$5-10
+    above baseline by year 10 and persists. Net global GDP drag from oil
+    partially offsets the productivity gain.
+    """
     years = np.arange(1, horizon + 1)
-    # logistic ramp from 0.2 to peak_delta around peak_year_offset
+    # Mechanism: logistic ramp from 0.2 to peak_delta around year `peak_year_offset`
+    # With base year 2026, peak_year_offset=15 -> peak in 2040 (matches literature).
     k = 0.35
     midpoint = peak_year_offset
-    deltas = 0.2 + (peak_delta - 0.2) / (1 + np.exp(-k * (years - midpoint)))
-    # mild continued growth after peak (compounding on top of logistic)
+    mech = 0.2 + (peak_delta - 0.2) / (1 + np.exp(-k * (years - midpoint)))
     post_peak_growth = 0.02
     for i, y in enumerate(years):
         if y > peak_year_offset:
-            deltas[i] = deltas[i] * (1 + post_peak_growth) ** (y - peak_year_offset)
+            mech[i] = mech[i] * (1 + post_peak_growth) ** (y - peak_year_offset)
+
+    # Oil channel: ramps from $0 to $peak_oil_delta over ~10y, persists
+    oil_bbl = peak_oil_delta * (1 - np.exp(-years / 6.0))
+    oil_gdp = oil_to_gdp(oil_bbl, base_gdp=110.0, elasticity=OIL_ELASTICITY_GLOBAL)
+
+    deltas = mech + oil_gdp
+
     explicit_pv = pv_stream(deltas, discount_rate)
     tv = terminal_value(deltas[-1], terminal_growth, discount_rate)
     tv_pv = tv / (1 + discount_rate) ** horizon
+    oil_pv = pv_stream(oil_gdp, discount_rate)
     total = explicit_pv + tv_pv
+
     return DCFResult(
         name="AI (global)",
         years=years,
         annual_delta=deltas,
+        mechanism_delta=mech,
+        oil_delta_bbl=oil_bbl,
+        oil_gdp_delta=oil_gdp,
         explicit_pv=explicit_pv,
         terminal_pv=tv_pv,
+        oil_pv=oil_pv,
         total_pv=total,
         discount_rate=discount_rate,
         notes=(
             "Global incremental GDP, S-curve adoption, 30y explicit + Gordon "
-            "terminal at 1.5% real growth. Central case anchored to GS/McKinsey "
-            "ranges; peak ~$4.5T/yr by 2040."
+            "terminal at 1.5% real growth. Anchored to GS/McKinsey ranges; "
+            "peak ~$4.5T/yr by 2040. Oil channel: +$7/bbl by year 10."
         ),
     )
 
@@ -128,34 +177,56 @@ def run_trump_dcf(discount_rate: float = 0.05,
                   horizon: int = 20,
                   us_gdp: float = 29.0,
                   peak_pct: float = -0.007) -> DCFResult:
+    """Trump 2.0 (US), base year 2026.
+
+    Trump took office Jan 2025; year 1 of this DCF (2026) is already mid-term,
+    so policy is at full peak from y1 (no ramp). Decay begins after term ends
+    (post-2029, i.e. y4+).
+
+    Oil channel: deregulation pushes US production ~+0.5-1.0 mb/d, plus tariff-
+    driven demand softening, putting WTI ~-$5/bbl during term. Effect fades
+    after the term as supply normalizes.
+    """
     years = np.arange(1, horizon + 1)
-    pct = np.zeros(horizon)
-    for i, y in enumerate(years):
-        if y == 1:
-            pct[i] = peak_pct * 0.5
-        elif 2 <= y <= 4:
-            pct[i] = peak_pct        # full term peak
-        elif 5 <= y <= 8:
-            pct[i] = peak_pct * 0.6  # partial persistence (debt, lost cohorts, supply chains)
-        elif 9 <= y <= 14:
-            pct[i] = peak_pct * 0.3
-        else:
-            pct[i] = peak_pct * 0.1
-    deltas = pct * us_gdp  # $T per year
+    # Profile: full peak y1-3 (2026-2028), partial y4 (2029 transition),
+    # persistence then decay.
+    profile = (
+        [1.0, 1.0, 1.0]            # y1-3: 2026-2028 (Trump term, full peak)
+        + [0.7]                    # y4: 2029 (handoff)
+        + [0.5, 0.5, 0.5]          # y5-7: 2030-2032 (immediate persistence)
+        + [0.3] * 5                # y8-12: 2033-2037
+        + [0.1] * 8                # y13-20: 2038-2045
+    )
+    profile = np.array(profile[:horizon])
+    pct = peak_pct * profile
+    mech = pct * us_gdp  # $T/yr
+
+    # Oil channel: $-5/bbl during term, fading
+    oil_bbl = np.array(
+        [-5.0, -5.0, -5.0, -3.0, -1.0, -1.0, -1.0] + [0.0] * (horizon - 7)
+    )[:horizon]
+    oil_gdp = oil_to_gdp(oil_bbl, base_gdp=us_gdp, elasticity=OIL_ELASTICITY_US)
+
+    deltas = mech + oil_gdp
     explicit_pv = pv_stream(deltas, discount_rate)
-    # No Gordon terminal: effects largely decayed by year 20.
+    oil_pv = pv_stream(oil_gdp, discount_rate)
     return DCFResult(
         name="Trump 2.0 (US)",
         years=years,
         annual_delta=deltas,
+        mechanism_delta=mech,
+        oil_delta_bbl=oil_bbl,
+        oil_gdp_delta=oil_gdp,
         explicit_pv=explicit_pv,
         terminal_pv=0.0,
+        oil_pv=oil_pv,
         total_pv=explicit_pv,
         discount_rate=discount_rate,
         notes=(
             "US GDP impact, peak ~-0.7% during term, partial persistence then "
             "decay over 20 years. Net of tariffs (-), tax cuts (+), immigration "
-            "(-), deregulation (+), deficit/rates (-)."
+            "(-), deregulation (+), deficit/rates (-). Oil channel: ~-$5/bbl "
+            "during term (drill-baby-drill + tariff-driven demand softening)."
         ),
     )
 
@@ -179,34 +250,56 @@ def run_trump_dcf(discount_rate: float = 0.05,
 def run_iran_war_dcf(discount_rate: float = 0.05,
                      horizon: int = 10,
                      global_gdp: float = 110.0) -> DCFResult:
+    """US-Iran war (global), base year 2026, conditional on conflict in 2026.
+
+    Oil channel is now broken out explicitly via the oil-price track. Mechanism
+    captures the non-oil channels: Hormuz shipping disruption, US fiscal cost,
+    financial-conditions tightening, long-tail Mid-East instability.
+    """
     years = np.arange(1, horizon + 1)
+
+    # Oil track: $/bbl deviation vs $75 baseline.
+    # Y1: $75 -> $120 sustained (+$45). Y2: +$25. Y3: +$10. Y4+: ~baseline.
+    oil_bbl = np.array(
+        [45.0, 25.0, 10.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    )[:horizon]
+    oil_gdp = oil_to_gdp(oil_bbl, base_gdp=global_gdp, elasticity=OIL_ELASTICITY_GLOBAL)
+
+    # Non-oil mechanism (% of global GDP):
+    # Y1: Hormuz -0.2, fiscal -0.05, financial -0.2 = -0.45%
+    # Y2: fiscal -0.05, instability -0.05 = -0.10%
+    # Y3: fiscal -0.05, instability -0.05 = -0.10%
+    # Y4-5: fiscal -0.05, instability -0.05 = -0.10%
+    # Y6-10: instability -0.05% / yr
     pct = np.zeros(horizon)
-    # Year 1: oil -0.6, Hormuz -0.2, fiscal -0.05, financial -0.2 = -1.05%
-    pct[0] = -0.0105
-    # Year 2: oil -0.3, fiscal -0.05, instability -0.05 = -0.40%
-    pct[1] = -0.0040
-    # Year 3: oil -0.1, fiscal -0.05, instability -0.05 = -0.20%
-    pct[2] = -0.0020
-    # Year 4-5: fiscal -0.05, instability -0.05 = -0.10%
+    pct[0] = -0.0045
+    pct[1] = -0.0010
+    pct[2] = -0.0010
     pct[3] = -0.0010
     pct[4] = -0.0010
-    # Year 6-10: instability -0.05% / yr
     for i in range(5, horizon):
         pct[i] = -0.0005
-    deltas = pct * global_gdp
+    mech = pct * global_gdp
+
+    deltas = mech + oil_gdp
     explicit_pv = pv_stream(deltas, discount_rate)
+    oil_pv = pv_stream(oil_gdp, discount_rate)
     return DCFResult(
         name="US-Iran war (global)",
         years=years,
         annual_delta=deltas,
+        mechanism_delta=mech,
+        oil_delta_bbl=oil_bbl,
+        oil_gdp_delta=oil_gdp,
         explicit_pv=explicit_pv,
         terminal_pv=0.0,
+        oil_pv=oil_pv,
         total_pv=explicit_pv,
         discount_rate=discount_rate,
         notes=(
-            "Conditional on a kinetic conflict, global. Oil shock dominates "
-            "Year 1; recovery over 3y; long-tail Middle East drag through y10. "
-            "Not probability-weighted."
+            "Conditional on a kinetic conflict starting 2026, global. Oil shock "
+            "(+$45/bbl Y1) dominates; recovery over 3y; long-tail Mid-East drag "
+            "through 2035. Not probability-weighted."
         ),
     )
 
@@ -254,15 +347,18 @@ def iran_sensitivity():
 def make_charts(ai: DCFResult, trump: DCFResult, iran: DCFResult, outdir: str):
     paths = {}
 
+    def cal(years):
+        return BASE_YEAR + years - 1
+
     # Chart 1: annual incremental GDP delta over time
     fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot(ai.years, ai.annual_delta, label="AI (global)", color="#1f77b4", linewidth=2)
-    ax.plot(trump.years, trump.annual_delta, label="Trump 2.0 (US)", color="#d62728", linewidth=2)
-    ax.plot(iran.years, iran.annual_delta, label="US-Iran war (global)", color="#7f0e0e", linewidth=2)
+    ax.plot(cal(ai.years), ai.annual_delta, label="AI (global)", color="#1f77b4", linewidth=2)
+    ax.plot(cal(trump.years), trump.annual_delta, label="Trump 2.0 (US)", color="#d62728", linewidth=2)
+    ax.plot(cal(iran.years), iran.annual_delta, label="US-Iran war (global)", color="#7f0e0e", linewidth=2)
     ax.axhline(0, color="black", linewidth=0.5)
-    ax.set_xlabel("Year (1 = 2025)")
+    ax.set_xlabel("Calendar year (base = 2026)")
     ax.set_ylabel("Annual incremental GDP, $ trillions")
-    ax.set_title("Annual incremental GDP impact, undiscounted")
+    ax.set_title("Annual incremental GDP impact, undiscounted (mechanism + oil)")
     ax.legend()
     ax.grid(alpha=0.3)
     fig.tight_layout()
@@ -277,11 +373,11 @@ def make_charts(ai: DCFResult, trump: DCFResult, iran: DCFResult, outdir: str):
         return np.cumsum(d)
 
     fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot(ai.years, discounted_cumulative(ai), label="AI (global)", color="#1f77b4", linewidth=2)
-    ax.plot(trump.years, discounted_cumulative(trump), label="Trump 2.0 (US)", color="#d62728", linewidth=2)
-    ax.plot(iran.years, discounted_cumulative(iran), label="US-Iran war (global)", color="#7f0e0e", linewidth=2)
+    ax.plot(cal(ai.years), discounted_cumulative(ai), label="AI (global)", color="#1f77b4", linewidth=2)
+    ax.plot(cal(trump.years), discounted_cumulative(trump), label="Trump 2.0 (US)", color="#d62728", linewidth=2)
+    ax.plot(cal(iran.years), discounted_cumulative(iran), label="US-Iran war (global)", color="#7f0e0e", linewidth=2)
     ax.axhline(0, color="black", linewidth=0.5)
-    ax.set_xlabel("Year (1 = 2025)")
+    ax.set_xlabel("Calendar year (PV as of start of 2026)")
     ax.set_ylabel("Cumulative discounted PV, $ trillions")
     ax.set_title("Cumulative present value over time (explicit horizon)")
     ax.legend()
@@ -292,29 +388,57 @@ def make_charts(ai: DCFResult, trump: DCFResult, iran: DCFResult, outdir: str):
     plt.close(fig)
     paths["cumulative"] = p2
 
-    # Chart 3: total PV bar
-    fig, ax = plt.subplots(figsize=(7, 4))
+    # Chart 3: total PV bar with mechanism + oil decomposition
+    fig, ax = plt.subplots(figsize=(7, 4.5))
     names = [ai.name, trump.name, iran.name]
     totals = [ai.total_pv, trump.total_pv, iran.total_pv]
-    colors_ = ["#1f77b4", "#d62728", "#7f0e0e"]
-    bars = ax.bar(names, totals, color=colors_)
+    oil_pvs = [ai.oil_pv, trump.oil_pv, iran.oil_pv]
+    mech_pvs = [t - o for t, o in zip(totals, oil_pvs)]
+    colors_main = ["#1f77b4", "#d62728", "#7f0e0e"]
+    x = np.arange(len(names))
+    bars1 = ax.bar(x - 0.2, mech_pvs, width=0.35, color=colors_main, label="Mechanism PV")
+    bars2 = ax.bar(x + 0.2, oil_pvs, width=0.35, color="#444", alpha=0.7, label="Oil channel PV")
     ax.axhline(0, color="black", linewidth=0.7)
-    ax.set_ylabel("Total PV, $ trillions")
-    ax.set_title("Total present value of incremental GDP impact")
-    for b, v in zip(bars, totals):
-        ax.text(b.get_x() + b.get_width() / 2,
-                v + (1 if v >= 0 else -1) * max(abs(min(totals)), abs(max(totals))) * 0.02,
-                f"${v:,.1f}T",
-                ha="center",
-                va="bottom" if v >= 0 else "top",
-                fontsize=10,
-                fontweight="bold")
+    ax.set_xticks(x)
+    ax.set_xticklabels(names)
+    ax.set_ylabel("PV, $ trillions")
+    ax.set_title("Present value: mechanism vs. oil-price channel (PV as of 2026)")
+    for bars, vals in [(bars1, mech_pvs), (bars2, oil_pvs)]:
+        for b, v in zip(bars, vals):
+            ax.text(b.get_x() + b.get_width() / 2,
+                    v + (1 if v >= 0 else -1) * (max(abs(min(totals)), abs(max(totals))) * 0.02),
+                    f"${v:,.1f}T",
+                    ha="center",
+                    va="bottom" if v >= 0 else "top",
+                    fontsize=8.5)
+    ax.legend(loc="upper right")
     ax.grid(alpha=0.3, axis="y")
     fig.tight_layout()
     p3 = f"{outdir}/chart_total.png"
     fig.savefig(p3, dpi=160)
     plt.close(fig)
     paths["total"] = p3
+
+    # Chart 4: oil-price track per scenario
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.plot(cal(ai.years), OIL_BASELINE + ai.oil_delta_bbl,
+            label="AI scenario", color="#1f77b4", linewidth=2)
+    ax.plot(cal(trump.years), OIL_BASELINE + trump.oil_delta_bbl,
+            label="Trump 2.0 scenario", color="#d62728", linewidth=2)
+    ax.plot(cal(iran.years), OIL_BASELINE + iran.oil_delta_bbl,
+            label="US-Iran war scenario", color="#7f0e0e", linewidth=2)
+    ax.axhline(OIL_BASELINE, color="black", linewidth=0.5, linestyle="--",
+               label=f"Baseline ${OIL_BASELINE:.0f}/bbl")
+    ax.set_xlabel("Calendar year")
+    ax.set_ylabel("Oil price, $/bbl (assumed track)")
+    ax.set_title("Oil-price assumption per scenario")
+    ax.legend()
+    ax.grid(alpha=0.3)
+    fig.tight_layout()
+    p4 = f"{outdir}/chart_oil.png"
+    fig.savefig(p4, dpi=160)
+    plt.close(fig)
+    paths["oil"] = p4
 
     return paths
 
@@ -354,20 +478,26 @@ def build_pdf(out_path: str,
     story.append(Paragraph(
         "<b>Author:</b> Claude (Opus 4.7) &nbsp;&nbsp; "
         "<b>Date:</b> 2026-05-03 &nbsp;&nbsp; "
-        "<b>Units:</b> real USD trillions, ex-inflation discount rates",
+        "<b>Base year:</b> 2026 (year 1 = 2026; PV as of start of 2026) &nbsp;&nbsp; "
+        "<b>Units:</b> real USD trillions, ex-inflation discount rates &nbsp;&nbsp; "
+        "<b>Channels:</b> mechanism + oil-price",
         small))
     story.append(Spacer(1, 12))
 
     story.append(Paragraph("Executive summary", h2))
     summary = (
-        f"Under central-case assumptions: AI's incremental GDP has a present value of "
+        f"Under central-case assumptions, with year 1 = 2026 and PV measured as of "
+        f"start-of-2026: AI's incremental GDP has a present value of "
         f"<b>{fmt_t(ai.total_pv)}</b> (global, 30-year explicit + Gordon terminal, "
-        f"discount rate {ai.discount_rate:.0%}). Trump 2.0's incremental US GDP has a "
-        f"present value of <b>{fmt_t(trump.total_pv)}</b> (20-year horizon, "
-        f"discount rate {trump.discount_rate:.0%}). A US-Iran kinetic war has a "
-        f"present value of <b>{fmt_t(iran.total_pv)}</b> in incremental global GDP "
-        f"(10-year horizon, discount rate {iran.discount_rate:.0%}, conditional on "
-        f"the war occurring &mdash; not probability-weighted)."
+        f"discount rate {ai.discount_rate:.0%}; oil channel contributes "
+        f"{fmt_t(ai.oil_pv)}). Trump 2.0's incremental US GDP has a present value of "
+        f"<b>{fmt_t(trump.total_pv)}</b> (20-year horizon, discount rate "
+        f"{trump.discount_rate:.0%}; oil channel contributes {fmt_t(trump.oil_pv)}). "
+        f"A US-Iran kinetic war has a present value of <b>{fmt_t(iran.total_pv)}</b> "
+        f"in incremental global GDP (10-year horizon, discount rate "
+        f"{iran.discount_rate:.0%}; oil channel contributes {fmt_t(iran.oil_pv)} and "
+        f"is the dominant transmission mechanism). Conditional on the war occurring "
+        f"&mdash; not probability-weighted."
     )
     story.append(Paragraph(summary, body))
     story.append(Spacer(1, 6))
@@ -386,15 +516,18 @@ def build_pdf(out_path: str,
 
     # headline table
     head_tbl = [
-        ["Scenario", "Horizon", "Discount", "Explicit PV", "Terminal PV", "Total PV"],
+        ["Scenario", "Horizon", "Discount", "Mechanism PV", "Oil PV", "Terminal PV", "Total PV"],
         [ai.name, f"{len(ai.years)} y", f"{ai.discount_rate:.0%}",
-         fmt_t(ai.explicit_pv), fmt_t(ai.terminal_pv), fmt_t(ai.total_pv)],
+         fmt_t(ai.total_pv - ai.terminal_pv - ai.oil_pv), fmt_t(ai.oil_pv),
+         fmt_t(ai.terminal_pv), fmt_t(ai.total_pv)],
         [trump.name, f"{len(trump.years)} y", f"{trump.discount_rate:.0%}",
-         fmt_t(trump.explicit_pv), fmt_t(trump.terminal_pv), fmt_t(trump.total_pv)],
+         fmt_t(trump.explicit_pv - trump.oil_pv), fmt_t(trump.oil_pv),
+         fmt_t(trump.terminal_pv), fmt_t(trump.total_pv)],
         [iran.name, f"{len(iran.years)} y", f"{iran.discount_rate:.0%}",
-         fmt_t(iran.explicit_pv), fmt_t(iran.terminal_pv), fmt_t(iran.total_pv)],
+         fmt_t(iran.explicit_pv - iran.oil_pv), fmt_t(iran.oil_pv),
+         fmt_t(iran.terminal_pv), fmt_t(iran.total_pv)],
     ]
-    t = Table(head_tbl, hAlign="LEFT", colWidths=[4 * cm, 2 * cm, 2 * cm, 3 * cm, 3 * cm, 3 * cm])
+    t = Table(head_tbl, hAlign="LEFT", colWidths=[3.6 * cm, 1.6 * cm, 1.6 * cm, 2.6 * cm, 2.2 * cm, 2.2 * cm, 2.4 * cm])
     t.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#222")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -415,11 +548,20 @@ def build_pdf(out_path: str,
     story.append(Paragraph("Methodology", h2))
     story.append(Paragraph(
         "I model each scenario as an annual stream of incremental GDP relative to a "
-        "no-event counterfactual, then discount to a present value using a real "
-        "(ex-inflation) discount rate. PV = &Sigma; &Delta;GDP<sub>t</sub> / (1+r)<sup>t</sup>, "
-        "with a Gordon-growth terminal value where economic fundamentals justify it "
-        "(only AI). For the political and war scenarios, the impact decays inside "
-        "the explicit horizon, so no terminal value is added.", body))
+        "no-event counterfactual, starting in 2026, then discount to a present value "
+        "as of start-of-2026 using a real (ex-inflation) discount rate. "
+        "PV = &Sigma; &Delta;GDP<sub>t</sub> / (1+r)<sup>t</sup>, with a Gordon-growth "
+        "terminal value where economic fundamentals justify it (only AI). For the "
+        "political and war scenarios, the impact decays inside the explicit horizon, "
+        "so no terminal value is added.", body))
+    story.append(Paragraph(
+        "<b>Two channels</b> are aggregated for each scenario: (a) the <i>core "
+        "mechanism</i> (productivity, policy, conflict) and (b) an <i>oil-price "
+        "channel</i> that converts a $/bbl deviation vs a $75 baseline into GDP "
+        "impact via an oil-to-GDP elasticity (0.15% global GDP per $10/bbl sustained "
+        "for global scenarios; 0.05% US GDP per $10/bbl for the now oil-balanced US). "
+        "This makes it possible to see, for each scenario, how much of the headline "
+        "PV is driven by oil-price assumptions specifically.", body))
     story.append(Paragraph(
         "Three deliberate choices shape the comparison: (1) AI is global and very "
         "long-horizon, while Trump 2.0 is mostly US and 4-20y, while the Iran war "
@@ -433,6 +575,15 @@ def build_pdf(out_path: str,
     story.append(Image(chart_paths["annual"], width=15 * cm, height=8.5 * cm))
     story.append(Spacer(1, 6))
     story.append(Image(chart_paths["cumulative"], width=15 * cm, height=8.5 * cm))
+    story.append(PageBreak())
+    story.append(Paragraph("Oil-price assumption per scenario", h3))
+    story.append(Paragraph(
+        "Three different oil tracks. The Iran-war track is a sharp spike that "
+        "dominates that scenario's PV. The AI track is a slow, persistent rise "
+        "from datacenter energy demand. The Trump 2.0 track is a small drop "
+        "from US production growth and tariff-driven demand softening, fading "
+        "after the term.", body))
+    story.append(Image(chart_paths["oil"], width=15 * cm, height=8.5 * cm))
 
     story.append(PageBreak())
 
@@ -440,12 +591,13 @@ def build_pdf(out_path: str,
     story.append(Paragraph("1) AI &mdash; global incremental GDP", h2))
     story.append(Paragraph("<b>Assumptions:</b>", body))
     ai_assump = [
-        ["Global GDP base (2025)", "$110T"],
-        ["Adoption profile", "Logistic ramp; $0.2T (2025) -> $4.5T (~2040)"],
-        ["Post-peak growth", "+2%/yr through year 30"],
-        ["Explicit horizon", "30 years"],
+        ["Global GDP base (2026)", "$110T"],
+        ["Adoption profile", "Logistic ramp; $0.2T (2026) -> $4.5T (2040)"],
+        ["Post-peak growth", "+2%/yr through year 30 (2055)"],
+        ["Explicit horizon", "30 years (2026-2055)"],
         ["Terminal growth", "1.5% real"],
         ["Real discount rate", f"{ai.discount_rate:.0%}"],
+        ["Oil channel", "Datacenter electricity demand pushes WTI +$7/bbl by 2035, persists; -0.10% global GDP drag at peak"],
         ["Anchors", "Goldman Sachs 2023 (~7% global GDP / 10y); McKinsey 2023 ($13-25T/yr by 2040); PwC 2017 ($15.7T by 2030)"],
     ]
     story.append(Table(ai_assump, hAlign="LEFT", colWidths=[5 * cm, 11 * cm],
@@ -458,10 +610,12 @@ def build_pdf(out_path: str,
     story.append(Spacer(1, 8))
     story.append(Paragraph(
         f"<b>Result:</b> Explicit-horizon PV {fmt_t(ai.explicit_pv)} + terminal PV "
-        f"{fmt_t(ai.terminal_pv)} = <b>total PV {fmt_t(ai.total_pv)}</b>. The "
-        f"terminal value is large because a permanent productivity uplift compounds "
-        f"forever; even at 6% real discounting, a $7-8T perpetual annual delta is "
-        f"worth on the order of $100T+ in present value terms.", body))
+        f"{fmt_t(ai.terminal_pv)} = <b>total PV {fmt_t(ai.total_pv)}</b>. Of which "
+        f"the oil channel contributes {fmt_t(ai.oil_pv)} (a small drag from "
+        f"datacenter-driven oil prices). The terminal value is large because a "
+        f"permanent productivity uplift compounds forever; even at 6% real "
+        f"discounting, a $7-8T perpetual annual delta is worth on the order of "
+        f"$100T+ in present value terms.", body))
     rates, peaks, grid = ai_sensitivity()
     sens = [["Peak $T/yr by 2040 \\ Discount"] + [f"{r:.0%}" for r in rates]]
     for i, p in enumerate(peaks):
@@ -498,10 +652,12 @@ def build_pdf(out_path: str,
         ["Immigration restriction", "-0.4% of US GDP (CBO labor force)"],
         ["Deregulation", "+0.3% of US GDP"],
         ["Deficit / higher real rates", "-0.2% of US GDP"],
-        ["Net peak", "-0.7% of US GDP"],
-        ["US GDP base", "$29T"],
-        ["Profile", "Ramp y1, peak y2-4, decay y5-20"],
+        ["Net peak (mechanism)", "-0.7% of US GDP"],
+        ["US GDP base (2026)", "$29T"],
+        ["Profile", "Full peak y1-3 (2026-28), handoff y4 (2029), decay through 2045"],
         ["Real discount rate", f"{trump.discount_rate:.0%}"],
+        ["Oil channel", "WTI -$5/bbl during term (drill-baby-drill + tariff demand softening); fades by 2033"],
+        ["Oil GDP elasticity", "0.05% US GDP per $10/bbl (US is roughly oil-balanced)"],
     ]
     story.append(Table(trump_assump, hAlign="LEFT", colWidths=[5 * cm, 11 * cm],
                        style=TableStyle([
@@ -512,9 +668,12 @@ def build_pdf(out_path: str,
                        ])))
     story.append(Spacer(1, 8))
     story.append(Paragraph(
-        f"<b>Result:</b> Total PV <b>{fmt_t(trump.total_pv)}</b>. The sign is "
-        f"negative in the central case but the magnitude is small relative to AI: "
-        f"a 0.7% level shock on a $29T economy that decays over 20 years is "
+        f"<b>Result:</b> Total PV <b>{fmt_t(trump.total_pv)}</b>, of which the "
+        f"mechanism channel is {fmt_t(trump.explicit_pv - trump.oil_pv)} and the "
+        f"oil channel is {fmt_t(trump.oil_pv)} (cheaper oil from US production "
+        f"growth is a small positive offset). The sign of the mechanism is "
+        f"negative in the central case but the magnitude is small relative to "
+        f"AI: a 0.7% level shock on a $29T economy that decays over 20 years is "
         f"~$2-2.5T undiscounted, ~$1-1.5T discounted. Reasonable bull cases "
         f"(deregulation > tariff drag) flip the sign without changing the order "
         f"of magnitude.", body))
@@ -552,13 +711,13 @@ def build_pdf(out_path: str,
     story.append(Paragraph("3) US-Iran war &mdash; global incremental GDP", h2))
     story.append(Paragraph("<b>Assumptions (conditional on conflict, central case):</b>", body))
     iran_assump = [
-        ["Oil price shock", "$75 -> $120 for ~12m, decay over 3y"],
-        ["Oil-to-GDP elasticity", "$10 sustained = ~0.15% global GDP drag"],
-        ["Strait of Hormuz / shipping", "-0.2% of global GDP, year 1 only"],
-        ["Direct US fiscal cost", "$300-700B over 5y (mid $500B)"],
-        ["Financial conditions tightening", "-0.2% of global GDP, year 1 only"],
-        ["Long-tail Mid-East instability", "-0.05% of global GDP, years 6-10"],
-        ["Global GDP base", "$110T"],
+        ["Oil price track (channel)", "$75 (2026 baseline) -> $120 Y1 -> $100 Y2 -> $85 Y3 -> $77 Y4 -> baseline"],
+        ["Oil-to-GDP elasticity", "0.15% global GDP per $10/bbl sustained"],
+        ["Strait of Hormuz / shipping (mech)", "-0.2% of global GDP, year 1 only"],
+        ["Direct US fiscal cost (mech)", "$300-700B over 5y (mid $500B), -0.05% global GDP/yr"],
+        ["Financial conditions tightening (mech)", "-0.2% of global GDP, year 1 only"],
+        ["Long-tail Mid-East instability (mech)", "-0.05% of global GDP, years 6-10"],
+        ["Global GDP base (2026)", "$110T"],
         ["Real discount rate", f"{iran.discount_rate:.0%}"],
         ["Probability weighting", "NOT applied (conditional PV)"],
     ]
@@ -571,10 +730,14 @@ def build_pdf(out_path: str,
                        ])))
     story.append(Spacer(1, 8))
     story.append(Paragraph(
-        f"<b>Result:</b> Total PV <b>{fmt_t(iran.total_pv)}</b>. Front-loaded: "
-        f"~70% of the loss falls in years 1-3. If you assign a 20% probability "
-        f"of an actual kinetic war over the next 4 years, the expected-value PV is "
-        f"roughly {fmt_t(iran.total_pv * 0.20)}; at 5%, {fmt_t(iran.total_pv * 0.05)}.",
+        f"<b>Result:</b> Total PV <b>{fmt_t(iran.total_pv)}</b>, of which the oil "
+        f"channel alone is {fmt_t(iran.oil_pv)} (~{abs(iran.oil_pv/iran.total_pv)*100:.0f}% "
+        f"of the total). Non-oil mechanism channels (Hormuz shipping, fiscal cost, "
+        f"financial tightening, instability) contribute "
+        f"{fmt_t(iran.explicit_pv - iran.oil_pv)}. Front-loaded: ~70% of the loss "
+        f"falls in years 1-3 (2026-2028). If you assign a 20% probability of an "
+        f"actual kinetic war over the next 4 years, the expected-value PV is roughly "
+        f"{fmt_t(iran.total_pv * 0.20)}; at 5%, {fmt_t(iran.total_pv * 0.05)}.",
         body))
     rates, sevs, grid = iran_sensitivity()
     sens = [["Severity \\ Discount"] + [f"{r:.0%}" for r in rates]]

@@ -99,20 +99,26 @@ def main():
     add_h3(doc, "AI vs. Trump 2.0 vs. US-Iran War (illustrative, order-of-magnitude)")
     add_para(doc,
              "Author: Claude (Opus 4.7)    Date: 2026-05-03    "
-             "Units: real USD trillions, ex-inflation discount rates",
+             "Base year: 2026 (year 1 = 2026; PV as of start-of-2026)    "
+             "Units: real USD trillions, ex-inflation discount rates    "
+             "Channels: mechanism + oil-price",
              size=9, italic=True, color=RGBColor(0x80, 0x80, 0x80))
 
     # Executive summary
     add_h2(doc, "Executive summary")
     add_para(doc,
-             f"Under central-case assumptions: AI's incremental GDP has a present value of "
+             f"Under central-case assumptions, with year 1 = 2026 and PV measured as of "
+             f"start-of-2026: AI's incremental GDP has a present value of "
              f"{fmt_t(ai.total_pv)} (global, 30-year explicit + Gordon terminal, "
-             f"discount rate {ai.discount_rate:.0%}). Trump 2.0's incremental US GDP has a "
-             f"present value of {fmt_t(trump.total_pv)} (20-year horizon, "
-             f"discount rate {trump.discount_rate:.0%}). A US-Iran kinetic war has a "
-             f"present value of {fmt_t(iran.total_pv)} in incremental global GDP "
-             f"(10-year horizon, discount rate {iran.discount_rate:.0%}, conditional on "
-             f"the war occurring — not probability-weighted).")
+             f"discount rate {ai.discount_rate:.0%}; oil channel contributes "
+             f"{fmt_t(ai.oil_pv)}). Trump 2.0's incremental US GDP has a present value "
+             f"of {fmt_t(trump.total_pv)} (20-year horizon, discount rate "
+             f"{trump.discount_rate:.0%}; oil channel contributes {fmt_t(trump.oil_pv)}). "
+             f"A US-Iran kinetic war has a present value of {fmt_t(iran.total_pv)} in "
+             f"incremental global GDP (10-year horizon, discount rate "
+             f"{iran.discount_rate:.0%}; oil channel contributes {fmt_t(iran.oil_pv)} "
+             f"and is the dominant transmission mechanism). Conditional on the war "
+             f"occurring — not probability-weighted.")
     ratio_at = abs(ai.total_pv / trump.total_pv) if trump.total_pv else float("inf")
     ratio_ai = abs(ai.total_pv / iran.total_pv) if iran.total_pv else float("inf")
     add_para(doc,
@@ -125,14 +131,17 @@ def main():
              f"and geopolitical shocks act on shorter horizons with bounded amplitude.")
 
     add_table(doc,
-              ["Scenario", "Horizon", "Discount", "Explicit PV", "Terminal PV", "Total PV"],
+              ["Scenario", "Horizon", "Discount", "Mechanism PV", "Oil PV", "Terminal PV", "Total PV"],
               [
                   [ai.name, f"{len(ai.years)} y", f"{ai.discount_rate:.0%}",
-                   fmt_t(ai.explicit_pv), fmt_t(ai.terminal_pv), fmt_t(ai.total_pv)],
+                   fmt_t(ai.total_pv - ai.terminal_pv - ai.oil_pv), fmt_t(ai.oil_pv),
+                   fmt_t(ai.terminal_pv), fmt_t(ai.total_pv)],
                   [trump.name, f"{len(trump.years)} y", f"{trump.discount_rate:.0%}",
-                   fmt_t(trump.explicit_pv), fmt_t(trump.terminal_pv), fmt_t(trump.total_pv)],
+                   fmt_t(trump.explicit_pv - trump.oil_pv), fmt_t(trump.oil_pv),
+                   fmt_t(trump.terminal_pv), fmt_t(trump.total_pv)],
                   [iran.name, f"{len(iran.years)} y", f"{iran.discount_rate:.0%}",
-                   fmt_t(iran.explicit_pv), fmt_t(iran.terminal_pv), fmt_t(iran.total_pv)],
+                   fmt_t(iran.explicit_pv - iran.oil_pv), fmt_t(iran.oil_pv),
+                   fmt_t(iran.terminal_pv), fmt_t(iran.total_pv)],
               ])
     doc.add_paragraph()
     doc.add_picture(chart_paths["total"], width=Inches(6.2))
@@ -143,11 +152,19 @@ def main():
     add_h2(doc, "Methodology")
     add_para(doc,
              "I model each scenario as an annual stream of incremental GDP relative to a "
-             "no-event counterfactual, then discount to a present value using a real "
-             "(ex-inflation) discount rate. PV = Σ ΔGDP_t / (1+r)^t, with a Gordon-growth "
-             "terminal value where economic fundamentals justify it (only AI). For the "
-             "political and war scenarios, the impact decays inside the explicit horizon, "
-             "so no terminal value is added.")
+             "no-event counterfactual, starting in 2026, then discount to a present value "
+             "as of start-of-2026 using a real (ex-inflation) discount rate. "
+             "PV = Σ ΔGDP_t / (1+r)^t, with a Gordon-growth terminal value where "
+             "economic fundamentals justify it (only AI). For the political and war "
+             "scenarios, the impact decays inside the explicit horizon, so no terminal "
+             "value is added.")
+    add_para(doc,
+             "Two channels are aggregated for each scenario: (a) the core mechanism "
+             "(productivity, policy, conflict) and (b) an oil-price channel that "
+             "converts a $/bbl deviation vs a $75 baseline into GDP impact via an "
+             "oil-to-GDP elasticity (0.15% global GDP per $10/bbl sustained for global "
+             "scenarios; 0.05% US GDP per $10/bbl for the now oil-balanced US). This "
+             "makes the oil-driven portion of each scenario's PV explicit.")
     add_para(doc,
              "Three deliberate choices shape the comparison: (1) AI is global and very "
              "long-horizon, while Trump 2.0 is mostly US and 4-20y, while the Iran war "
@@ -160,6 +177,14 @@ def main():
     doc.add_picture(chart_paths["annual"], width=Inches(6.2))
     doc.add_paragraph()
     doc.add_picture(chart_paths["cumulative"], width=Inches(6.2))
+    doc.add_paragraph()
+    add_h3(doc, "Oil-price assumption per scenario")
+    add_para(doc,
+             "Three different oil tracks. The Iran-war track is a sharp spike that "
+             "dominates that scenario's PV. The AI track is a slow, persistent rise from "
+             "datacenter energy demand. The Trump 2.0 track is a small drop from US "
+             "production growth and tariff-driven demand softening, fading after the term.")
+    doc.add_picture(chart_paths["oil"], width=Inches(6.2))
 
     doc.add_page_break()
 
@@ -168,12 +193,13 @@ def main():
     add_h3(doc, "Assumptions")
     add_table(doc, ["Parameter", "Value"],
               [
-                  ["Global GDP base (2025)", "$110T"],
-                  ["Adoption profile", "Logistic ramp; $0.2T (2025) -> $4.5T (~2040)"],
-                  ["Post-peak growth", "+2%/yr through year 30"],
-                  ["Explicit horizon", "30 years"],
+                  ["Global GDP base (2026)", "$110T"],
+                  ["Adoption profile", "Logistic ramp; $0.2T (2026) -> $4.5T (2040)"],
+                  ["Post-peak growth", "+2%/yr through 2055"],
+                  ["Explicit horizon", "30 years (2026-2055)"],
                   ["Terminal growth", "1.5% real"],
                   ["Real discount rate", f"{ai.discount_rate:.0%}"],
+                  ["Oil channel", "Datacenter electricity demand pushes WTI +$7/bbl by 2035, persists"],
                   ["Anchors",
                    "Goldman Sachs 2023 (~7% global GDP / 10y); McKinsey 2023 "
                    "($13-25T/yr by 2040); PwC 2017 ($15.7T by 2030)"],
@@ -182,10 +208,12 @@ def main():
     doc.add_paragraph()
     add_para(doc,
              f"Result: Explicit-horizon PV {fmt_t(ai.explicit_pv)} + terminal PV "
-             f"{fmt_t(ai.terminal_pv)} = total PV {fmt_t(ai.total_pv)}. The "
-             f"terminal value is large because a permanent productivity uplift compounds "
-             f"forever; even at 6% real discounting, a $7-8T perpetual annual delta is "
-             f"worth on the order of $100T+ in present value terms.")
+             f"{fmt_t(ai.terminal_pv)} = total PV {fmt_t(ai.total_pv)}. Of which the "
+             f"oil channel contributes {fmt_t(ai.oil_pv)} (a small drag from "
+             f"datacenter-driven oil prices). The terminal value is large because a "
+             f"permanent productivity uplift compounds forever; even at 6% real "
+             f"discounting, a $7-8T perpetual annual delta is worth on the order of "
+             f"$100T+ in present value terms.")
 
     rates, peaks, grid = ai_sensitivity()
     rows = []
@@ -217,19 +245,24 @@ def main():
                   ["Immigration restriction", "-0.4% of US GDP (CBO labor force)"],
                   ["Deregulation", "+0.3% of US GDP"],
                   ["Deficit / higher real rates", "-0.2% of US GDP"],
-                  ["Net peak", "-0.7% of US GDP"],
-                  ["US GDP base", "$29T"],
-                  ["Profile", "Ramp y1, peak y2-4, decay y5-20"],
+                  ["Net peak (mechanism)", "-0.7% of US GDP"],
+                  ["US GDP base (2026)", "$29T"],
+                  ["Profile", "Full peak y1-3 (2026-28), handoff y4 (2029), decay through 2045"],
                   ["Real discount rate", f"{trump.discount_rate:.0%}"],
+                  ["Oil channel", "WTI -$5/bbl during term (drill-baby-drill + tariff demand softening)"],
+                  ["Oil GDP elasticity", "0.05% US GDP per $10/bbl (US is roughly oil-balanced)"],
               ],
               header_color="d62728")
     doc.add_paragraph()
     add_para(doc,
-             f"Result: Total PV {fmt_t(trump.total_pv)}. The sign is negative in the "
-             f"central case but the magnitude is small relative to AI: a 0.7% level "
-             f"shock on a $29T economy that decays over 20 years is ~$2-2.5T "
-             f"undiscounted, ~$1-1.5T discounted. Reasonable bull cases (deregulation > "
-             f"tariff drag) flip the sign without changing the order of magnitude.")
+             f"Result: Total PV {fmt_t(trump.total_pv)}, of which mechanism is "
+             f"{fmt_t(trump.explicit_pv - trump.oil_pv)} and oil channel is "
+             f"{fmt_t(trump.oil_pv)} (cheaper oil is a small positive offset). The "
+             f"sign of the mechanism is negative in the central case but the magnitude "
+             f"is small relative to AI: a 0.7% level shock on a $29T economy that "
+             f"decays over 20 years is ~$2-2.5T undiscounted, ~$1-1.5T discounted. "
+             f"Reasonable bull cases (deregulation > tariff drag) flip the sign without "
+             f"changing the order of magnitude.")
 
     rates, peaks, grid = trump_sensitivity()
     label_map = {-0.015: "-1.5% (bear)", -0.007: "-0.7% (base)",
@@ -257,23 +290,28 @@ def main():
     add_h3(doc, "Assumptions (conditional on conflict, central case)")
     add_table(doc, ["Parameter", "Value"],
               [
-                  ["Oil price shock", "$75 -> $120 for ~12m, decay over 3y"],
-                  ["Oil-to-GDP elasticity", "$10 sustained = ~0.15% global GDP drag"],
-                  ["Strait of Hormuz / shipping", "-0.2% of global GDP, year 1 only"],
-                  ["Direct US fiscal cost", "$300-700B over 5y (mid $500B)"],
-                  ["Financial conditions tightening", "-0.2% of global GDP, year 1 only"],
-                  ["Long-tail Mid-East instability", "-0.05% of global GDP, years 6-10"],
-                  ["Global GDP base", "$110T"],
+                  ["Oil price track (channel)", "$75 (2026) -> $120 Y1 -> $100 Y2 -> $85 Y3 -> $77 Y4 -> baseline"],
+                  ["Oil-to-GDP elasticity", "0.15% global GDP per $10/bbl sustained"],
+                  ["Strait of Hormuz / shipping (mech)", "-0.2% of global GDP, year 1 only"],
+                  ["Direct US fiscal cost (mech)", "$300-700B over 5y (mid $500B), -0.05% global GDP/yr"],
+                  ["Financial conditions tightening (mech)", "-0.2% of global GDP, year 1 only"],
+                  ["Long-tail Mid-East instability (mech)", "-0.05% of global GDP, years 6-10"],
+                  ["Global GDP base (2026)", "$110T"],
                   ["Real discount rate", f"{iran.discount_rate:.0%}"],
                   ["Probability weighting", "NOT applied (conditional PV)"],
               ],
               header_color="7f0e0e")
     doc.add_paragraph()
     add_para(doc,
-             f"Result: Total PV {fmt_t(iran.total_pv)}. Front-loaded: ~70% of the loss "
-             f"falls in years 1-3. If you assign a 20% probability of an actual kinetic "
-             f"war over the next 4 years, the expected-value PV is roughly "
-             f"{fmt_t(iran.total_pv * 0.20)}; at 5%, {fmt_t(iran.total_pv * 0.05)}.")
+             f"Result: Total PV {fmt_t(iran.total_pv)}, of which the oil channel alone "
+             f"is {fmt_t(iran.oil_pv)} (~{abs(iran.oil_pv/iran.total_pv)*100:.0f}% of "
+             f"the total). Non-oil mechanism channels (Hormuz shipping, fiscal cost, "
+             f"financial tightening, instability) contribute "
+             f"{fmt_t(iran.explicit_pv - iran.oil_pv)}. Front-loaded: ~70% of the loss "
+             f"falls in years 1-3 (2026-2028). If you assign a 20% probability of an "
+             f"actual kinetic war over the next 4 years, the expected-value PV is "
+             f"roughly {fmt_t(iran.total_pv * 0.20)}; at 5%, "
+             f"{fmt_t(iran.total_pv * 0.05)}.")
 
     rates, sevs, grid = iran_sensitivity()
     sev_label = {0.5: "0.5x (limited strikes)", 1.0: "1.0x (base)",
