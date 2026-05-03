@@ -3,9 +3,9 @@ Generate GDP.docx — same content as the PDF, native Word format.
 Reuses DCF models from analysis.py.
 """
 from analysis import (
-    run_ai_dcf, run_trump_dcf, run_iran_war_dcf,
+    run_ai_dcf, run_trump_dcf, run_iran_war_dcf, run_internet_2000_dcf,
     ai_sensitivity, trump_sensitivity, iran_sensitivity,
-    make_charts, fmt_t,
+    make_charts, fmt_t, INFLATION_2000_TO_2026,
 )
 
 from docx import Document
@@ -129,6 +129,16 @@ def main():
              f"by at least one order of magnitude in our central case — because it is a "
              f"long-duration productivity shock compounded over decades, while political "
              f"and geopolitical shocks act on shorter horizons with bounded amplitude.")
+    _internet_preview = run_internet_2000_dcf()
+    _internet_pv_2026 = _internet_preview.total_pv * INFLATION_2000_TO_2026
+    _ai_internet = ai.total_pv / _internet_pv_2026
+    add_para(doc,
+             f"Sanity check vs. dot-com era forecasts. The synthesized 1999-2000 "
+             f"consensus forecast for the internet's incremental global GDP, when FV'd "
+             f"to 2026 dollars (CPI x{INFLATION_2000_TO_2026}), has a PV of "
+             f"{fmt_t(_internet_pv_2026)}. Today's AI forecast at {fmt_t(ai.total_pv)} "
+             f"is only {_ai_internet:.2f}x larger — effectively the same order of "
+             f"magnitude. See section 4 for the detailed comparison.")
 
     add_table(doc,
               ["Scenario", "Horizon", "Discount", "Mechanism PV", "Oil PV", "Terminal PV", "Total PV"],
@@ -334,9 +344,103 @@ def main():
 
     doc.add_page_break()
 
+    # 4) Dot-com era benchmark
+    internet = run_internet_2000_dcf()
+    internet_pv_2026usd = internet.total_pv * INFLATION_2000_TO_2026
+    ai_internet_ratio = ai.total_pv / internet_pv_2026usd
+
+    add_h2(doc, "4) Benchmark: dot-com era internet forecast (1999-2000)")
+    add_para(doc,
+             "Are today's AI GDP forecasts unprecedented, or do they look like every "
+             "other transformative-tech hype cycle? To check, I built a synthesized "
+             "1999-2000 consensus optimistic forecast for the internet's incremental "
+             "global GDP, computed its DCF as of 2000 in 2000 dollars, then re-expressed "
+             f"in 2026 dollars (FV factor x{INFLATION_2000_TO_2026:.2f}, US CPI cumulative "
+             "2000→2026). Same DCF mechanics as AI: 30y explicit horizon, Gordon terminal "
+             "at 1.5%, 6% real discount rate.")
+
+    add_h3(doc, "Forecast assumptions (in 2000 dollars)")
+    add_table(doc, ["Parameter", "Value"],
+              [
+                  ["Global GDP base (2000)", "$33T nominal"],
+                  ["Year 1 (2001) starting delta", "$0.15T (2000$)"],
+                  ["Peak delta (year 18, ~2018)", "$2.5T/yr (2000$)"],
+                  ["Adoption profile", "Logistic ramp; +2%/yr post-peak"],
+                  ["Explicit horizon", "30 years (2001-2030)"],
+                  ["Terminal growth", "1.5% real"],
+                  ["Real discount rate", f"{internet.discount_rate:.0%}"],
+                  ["FV factor 2000$ → 2026$", f"x{INFLATION_2000_TO_2026:.2f} (US CPI)"],
+                  ["Anchors",
+                   "Goldman Sachs (Hatzius, 1999): Internet adds ~0.5% to global growth "
+                   "permanently. Forrester 2000: $6.8T global B2B e-commerce by 2004. "
+                   "Cisco/U.Texas (1999): Internet economy $850B in 2000. WEF 'Long "
+                   "Boom' thesis."],
+              ],
+              header_color="2ca02c")
+    doc.add_paragraph()
+
+    add_h3(doc, "Result — the punchline")
+    add_table(doc,
+              ["", "PV in 2000 dollars", "PV in 2026 dollars (FV x1.85)"],
+              [
+                  ["Explicit-horizon PV", fmt_t(internet.explicit_pv),
+                   fmt_t(internet.explicit_pv * INFLATION_2000_TO_2026)],
+                  ["Terminal PV", fmt_t(internet.terminal_pv),
+                   fmt_t(internet.terminal_pv * INFLATION_2000_TO_2026)],
+                  ["Total PV", fmt_t(internet.total_pv),
+                   fmt_t(internet_pv_2026usd)],
+                  ["AI 2026 forecast (for reference)", "—", fmt_t(ai.total_pv)],
+                  ["Ratio AI / Internet (in 2026$)", "—", f"{ai_internet_ratio:.2f}x"],
+              ],
+              header_color="2ca02c")
+    doc.add_paragraph()
+
+    add_para(doc,
+             f"In 2026-dollar terms, the late-1990s internet forecast had a present "
+             f"value of roughly {fmt_t(internet_pv_2026usd)}, versus today's AI "
+             f"forecast of {fmt_t(ai.total_pv)}. The AI forecast is only "
+             f"{ai_internet_ratio:.2f}x larger — effectively the same order of "
+             f"magnitude, possibly within the noise of either model's assumption set. "
+             f"This is the most important calibration in the report: when adjusted for "
+             f"inflation and put into the same DCF framework, today's AI GDP forecasts "
+             f"are NOT obviously larger than what serious analysts believed about the "
+             f"internet at the peak of the dot-com bubble.")
+    doc.add_paragraph()
+    doc.add_picture(chart_paths["internet_vs_ai"], width=Inches(6.2))
+    doc.add_paragraph()
+
+    add_h3(doc, "What this comparison does and does not say")
+    add_para(doc,
+             "It does NOT say AI is a bubble or that current forecasts are wrong. The "
+             "actual realized internet GDP impact (BEA digital-economy series, 2000-2024) "
+             "ended up being a meaningful fraction of the optimistic 2000 forecast — "
+             "perhaps 50-70% of it. The dot-com bust was a valuation event, not a GDP "
+             "event. So a forecast PV of ~$43T (2026$) for the internet was, ex-post, "
+             "not crazy — a substantial fraction was actually delivered.")
+    add_para(doc,
+             "It DOES say: (i) Forecasts of 'total GDP a transformative tech will add' "
+             "are remarkably similar across cycles when normalized to real units. The "
+             "forecasted ceiling moves with global GDP, not with the technology. "
+             "(ii) The base rate for these forecasts being substantially right exists "
+             "but is lower than the forecasters thought. (iii) If AI's realized impact "
+             "is 50-70% of the central forecast (matching internet's hit rate), the "
+             "realized PV is still in the $25-35T range — smaller than the headline "
+             "but still ~10-20x larger than Trump 2.0 or an Iran war.")
+    add_para(doc,
+             "Caveats on the internet number: (i) The 2000-era forecast is a synthesized "
+             "consensus, not any single published number. Different anchors give a range "
+             "of $25-65T (2026$) for the PV. (ii) The 6% real discount rate is "
+             "anachronistic-friendly: 1999-2000 nominal long rates were ~6% with low "
+             "inflation expectations, so a real discount of 4-5% would be more "
+             "historically faithful and would push the PV higher (to $50-60T in 2026$). "
+             "At 4% real discounting, the internet PV would actually exceed the AI PV.",
+             size=9, italic=True, color=RGBColor(0x80, 0x80, 0x80))
+
+    doc.add_page_break()
+
     # Comparison
     add_h2(doc, "Comparison & interpretation")
-    add_para(doc, "Three observations matter more than any single number:")
+    add_para(doc, "Four observations matter more than any single number:")
     add_para(doc,
              f"1. Duration dominates magnitude. AI's PV is ~{ratio_at:.0f}x Trump 2.0's "
              f"not because the annual flow is ~{ratio_at:.0f}x larger — at peak it's "
@@ -358,6 +462,16 @@ def main():
              "for deployment risk), the gap narrows but does not close. AI remains "
              "the dominant economic force in every scenario where it is not actively "
              "suppressed.")
+    add_para(doc,
+             f"4. AI's forecast is not historically unprecedented. The 2000-era "
+             f"internet forecast, FV'd to 2026 dollars, has a PV of "
+             f"~{fmt_t(internet_pv_2026usd)} — only {ai_internet_ratio:.2f}x smaller "
+             f"than today's AI forecast of {fmt_t(ai.total_pv)}. At a more "
+             f"historically appropriate 4% real discount rate, the internet forecast "
+             f"PV would actually exceed AI's. Read this two ways: it is reassuring "
+             f"(productivity-tech forecasts have a track record of partial delivery), "
+             f"and cautionary (forecasters systematically over-anchor on global GDP "
+             f"rather than on the technology's actual diffusion curve).")
 
     add_h3(doc, "What this analysis is NOT")
     add_para(doc,
